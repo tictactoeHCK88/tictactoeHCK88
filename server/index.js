@@ -46,6 +46,39 @@ function checkWinnerAI(board) {
   return null;
 }
 
+function minimax(board, depth, isMaximizing) {
+  const winner = checkWinnerAI(board);
+
+  // Terminal states
+  if (winner === "O") return 10 - depth; // AI wins
+  if (winner === "X") return depth - 10; // Player wins
+  if (board.every((cell) => cell !== null)) return 0; // Draw
+
+  if (isMaximizing) {
+    let bestScore = -Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (board[i] === null) {
+        board[i] = "O";
+        const score = minimax(board, depth + 1, false);
+        board[i] = null;
+        bestScore = Math.max(score, bestScore);
+      }
+    }
+    return bestScore;
+  } else {
+    let bestScore = Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (board[i] === null) {
+        board[i] = "X";
+        const score = minimax(board, depth + 1, true);
+        board[i] = null;
+        bestScore = Math.min(score, bestScore);
+      }
+    }
+    return bestScore;
+  }
+}
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
   console.log(`✅ Server running at http://localhost:${PORT}`)
