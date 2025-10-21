@@ -22,8 +22,29 @@ const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 const model = genAI
   ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
   : null;
-  
+
+const rooms = {};
+
 app.get("/", (_req, res) => res.send("Tic-Tac-Toe Realtime Server OK"));
+
+function checkWinnerAI(board) {
+  const lines = [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
+  ];
+  for (const [a, b, c] of lines) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return board[a];
+    }
+  }
+  return null;
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
