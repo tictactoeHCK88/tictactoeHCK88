@@ -48,6 +48,14 @@ io.on("connection", (socket) => {
 
       room.players.push({ name: safeName, socketId: socket.id });
     }
+    io.to(roomId).emit("playerJoined", {
+      players: room.players.map((p) => ({
+        name: p.name,
+        socketId: p.socketId,
+      })),
+      turn: room.turn,
+      board: room.board,
+    });
   });
 });
 
