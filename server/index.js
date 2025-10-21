@@ -79,6 +79,26 @@ function minimax(board, depth, isMaximizing) {
   }
 }
 
+function getBestMove(board) {
+  let bestScore = -Infinity;
+  let bestMove = null;
+
+  for (let i = 0; i < 9; i++) {
+    if (board[i] === null) {
+      board[i] = "O";
+      const score = minimax(board, 0, false);
+      board[i] = null;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMove = i;
+      }
+    }
+  }
+
+  return bestMove;
+}
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
   console.log(`✅ Server running at http://localhost:${PORT}`)
