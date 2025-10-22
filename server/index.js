@@ -122,7 +122,30 @@ app.post("/api/ai-move", async (req, res) => {
         })
         .join(", ");
         
-      
+      const prompt = `You are playing Tic-Tac-Toe as O player. The current board state is: ${boardState}.
+Available moves (empty cells): ${emptyIdx.join(", ")}.
+
+Rules:
+1. Prioritize winning moves (3 in a row for O)
+2. Block opponent's winning moves (prevent X from getting 3 in a row)
+3. Take center (4) if available
+4. Take corners if available
+5. Choose strategically
+
+Respond with ONLY the cell number (0-8) you want to place O. No explanation, just the number.`;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text().trim();
+      const aiMove = parseInt(text.match(/\d+/)?.[0]);
+
+      if (aiMove >= 0 && aiMove <= 8 && emptyIdx.includes(aiMove)) {
+        move = aiMove;
+        console.log(`🤖 AI (MEDIUM): Gemini chose ${move}`);
+      } else {
+        move = emptyIdx[Math.floor(Math.random() * emptyIdx.length)];
+        console.log(`🤖 AI (MEDIUM): Fallback random = ${move}`);
+      }
     } else {
       // EASY MODE: Random
       move = emptyIdx[Math.floor(Math.random() * emptyIdx.length)];
