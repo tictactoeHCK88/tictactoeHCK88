@@ -103,6 +103,14 @@ io.on("connection", (socket) => {
       message: message.trim(),
     });
   });
+
+  socket.on("resetGameRequest", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    room.board = Array(9).fill(null);
+    room.turn = "X";
+    io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+  });
 });
 
 const PORT = process.env.PORT || 3000;
