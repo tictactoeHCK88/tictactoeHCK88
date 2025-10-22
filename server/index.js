@@ -23,7 +23,6 @@ const model = genAI
   ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
   : null;
 
-
 const rooms = {};
 
 app.get("/", (_req, res) => res.send(" Tic-Tac-Toe Realtime Server OK"));
@@ -51,9 +50,9 @@ function minimax(board, depth, isMaximizing) {
   const winner = checkWinnerAI(board);
 
   // Terminal states
-  if (winner === "O") return 10 - depth; 
-  if (winner === "X") return depth - 10; 
-  if (board.every((cell) => cell !== null)) return 0; 
+  if (winner === "O") return 10 - depth;
+  if (winner === "X") return depth - 10;
+  if (board.every((cell) => cell !== null)) return 0;
 
   if (isMaximizing) {
     let bestScore = -Infinity;
@@ -162,9 +161,10 @@ Respond with ONLY the cell number (0-8) you want to place O. No explanation, jus
 });
 
 io.on("connection", (socket) => {
+  console.log(`New socket connected: ${socket.id}`);
+
   socket.on("joinRoom", ({ roomId, playerName }) => {
     if (!roomId) return;
-    socket.join(roomId);
 
     if (!rooms[roomId]) {
       rooms[roomId] = {
@@ -172,29 +172,65 @@ io.on("connection", (socket) => {
         turn: "X",
         players: [],
       };
+      console.log(`Room ${roomId} created`);
     }
 
     const room = rooms[roomId];
+    console.log(
+      `Socket ${socket.id} trying to join room ${roomId}. Current players: ${room.players.length}`
+    );
 
+    // Check if this socket is already in the room (reconnection)
     const existingPlayerIdx = room.players.findIndex(
       (p) => p.socketId === socket.id
     );
-    if (existingPlayerIdx === -1) {
-      const safeName =
-        playerName?.trim() || `Player-${String(socket.id).slice(-4)}`;
 
-      const nameTaken = room.players.some(
-        (p) => p.name.toLowerCase() === safeName.toLowerCase()
-      );
-      if (nameTaken) {
-        socket.emit("error", {
-          message: "Nama sudah digunakan di room ini. Silakan ganti nama!",
-        });
-        return;
-      }
+    if (existingPlayerIdx !== -1) {
+      // Player already exists, just rejoin the socket room
+      console.log(`Socket ${socket.id} reconnecting to room ${roomId}`);
+      socket.join(roomId);
 
-      room.players.push({ name: safeName, socketId: socket.id });
+      io.to(roomId).emit("playerJoined", {
+        players: room.players.map((p) => ({
+          name: p.name,
+          socketId: p.socketId,
+        })),
+        turn: room.turn,
+        board: room.board,
+      });
+      return;
     }
+
+    // New player trying to join
+    // Check if room is full (max 2 players)
+    if (room.players.length >= 2) {
+      console.log(`Room ${roomId} is FULL. Rejecting socket ${socket.id}`);
+      socket.emit("error", {
+        message: "Room sudah penuh! Maksimal 2 pemain per room.",
+      });
+      return;
+    }
+
+    const safeName =
+      playerName?.trim() || `Player-${String(socket.id).slice(-4)}`;
+
+    const nameTaken = room.players.some(
+      (p) => p.name.toLowerCase() === safeName.toLowerCase()
+    );
+    if (nameTaken) {
+      console.log(`Name ${safeName} already taken in room ${roomId}`);
+      socket.emit("error", {
+        message: "Nama sudah digunakan di room ini. Silakan ganti nama!",
+      });
+      return;
+    }
+
+    // Add new player
+    room.players.push({ name: safeName, socketId: socket.id });
+    socket.join(roomId);
+    console.log(
+      `Player ${safeName} joined room ${roomId}. Total players: ${room.players.length}`
+    );
 
     io.to(roomId).emit("playerJoined", {
       players: room.players.map((p) => ({
@@ -252,12 +288,66 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("leaderboardUpdate", ({ roomId, leaderboard }) => {
+    if (!roomId || !leaderboard) return;
+    io.to(roomId).emit("leaderboardUpdate", { leaderboard });
+  });
+
+  socket.on("leaderboardClear", ({ roomId }) => {
+    if (!roomId) return;
+    io.to(roomId).emit("leaderboardClear");
+  });
+
   socket.on("resetGameRequest", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
     room.board = Array(9).fill(null);
     room.turn = "X";
     io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+  });
+
+  socket.on("disconnecting", () => {
+    // Get all rooms this socket is in
+    const socketRooms = Array.from(socket.rooms);
+
+    socketRooms.forEach((roomId) => {
+      // Skip the default socket.id room
+      if (roomId === socket.id) return;
+
+      const room = rooms[roomId];
+      if (!room) return;
+
+      const playerIndex = room.players.findIndex(
+        (p) => p.socketId === socket.id
+      );
+
+      if (playerIndex !== -1) {
+        console.log(
+          `Player ${room.players[playerIndex].name} leaving room ${roomId}`
+        );
+        room.players.splice(playerIndex, 1);
+
+        // If room is empty, delete it
+        if (room.players.length === 0) {
+          console.log(`Room ${roomId} is empty, deleting...`);
+          delete rooms[roomId];
+        } else {
+          // Notify remaining players
+          io.to(roomId).emit("playerJoined", {
+            players: room.players.map((p) => ({
+              name: p.name,
+              socketId: p.socketId,
+            })),
+            turn: room.turn,
+            board: room.board,
+          });
+        }
+      }
+    });
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`Socket disconnected: ${socket.id}`);
   });
 });
 
@@ -275,7 +365,7 @@ function checkWinner(board) {
 
   for (const [a, b, c] of lines) {
     if (board[a] && board[a] === board[b] && board[a] === board[c]) {
-      return { winner: board[a], line: [a, b, c] }; 
+      return { winner: board[a], line: [a, b, c] };
     }
   }
   return null;
