@@ -57,7 +57,81 @@ io.on("connection", (socket) => {
       board: room.board,
     });
   });
+
+  socket.on("makeMove", ({ roomId, index, symbol }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (index < 0 || index > 8) return;
+    if (room.board[index]) return;
+    if (symbol !== room.turn) return;
+
+    room.board[index] = symbol;
+    room.turn = symbol === "X" ? "O" : "X";
+
+    const result = checkWinner(room.board);
+    if (result) {
+      const winnerSymbol = result.winner;
+      const winnerPlayer = room.players[winnerSymbol === "X" ? 0 : 1];
+      const winnerName = winnerPlayer?.name || winnerSymbol;
+
+      io.to(roomId).emit("winner", {
+        winner: winnerName,
+        line: result.line,
+      });
+
+      setTimeout(() => {
+        room.board = Array(9).fill(null);
+        room.turn = "X";
+        io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+      }, 3000);
+    } else if (room.board.every((c) => c !== null)) {
+      io.to(roomId).emit("winner", { winner: "Draw" });
+      setTimeout(() => {
+        room.board = Array(9).fill(null);
+        room.turn = "X";
+        io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+      }, 3000);
+    } else {
+      io.to(roomId).emit("boardUpdate", { board: room.board, turn: room.turn });
+    }
+  });
+
+  socket.on("chatMessage", ({ roomId, playerName, message }) => {
+    if (!roomId || !message?.trim()) return;
+    io.to(roomId).emit("chatMessage", {
+      playerName: playerName?.trim() || "Player",
+      message: message.trim(),
+    });
+  });
+
+  socket.on("resetGameRequest", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    room.board = Array(9).fill(null);
+    room.turn = "X";
+    io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+  });
 });
+
+function checkWinner(board) {
+  const lines = [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
+  ];
+
+  for (const [a, b, c] of lines) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return { winner: board[a], line: [a, b, c] }; // 🟢 kirim posisi menang
+    }
+  }
+  return null;
+}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
