@@ -114,7 +114,20 @@ app.post("/api/ai-move", async (req, res) => {
     if (difficulty === "hard") {
       move = getBestMove([...board]);
       console.log(`🤖 AI (HARD): Calculated best move = ${move}`);
-    } 
+    } else if (difficulty === "medium" && model) {
+      const boardState = board
+        .map((cell, i) => {
+          if (cell === null) return `${i}: empty`;
+          return `${i}: ${cell}`;
+        })
+        .join(", ");
+        
+      
+    } else {
+      // EASY MODE: Random
+      move = emptyIdx[Math.floor(Math.random() * emptyIdx.length)];
+      console.log(`🤖 AI (EASY): Random move = ${move}`);
+    }
 
     res.json({ move, difficulty });
   } catch (error) {
