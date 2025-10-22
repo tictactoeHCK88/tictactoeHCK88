@@ -57,6 +57,45 @@ io.on("connection", (socket) => {
       board: room.board,
     });
   });
+
+  socket.on("makeMove", ({ roomId, index, symbol }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (index < 0 || index > 8) return;
+    if (room.board[index]) return;
+    if (symbol !== room.turn) return;
+
+    room.board[index] = symbol;
+    room.turn = symbol === "X" ? "O" : "X";
+
+    const result = checkWinner(room.board);
+    if (result) {
+      // Dapatkan nama player berdasarkan symbol
+      const winnerSymbol = result.winner;
+      const winnerPlayer = room.players[winnerSymbol === "X" ? 0 : 1];
+      const winnerName = winnerPlayer?.name || winnerSymbol;
+
+      io.to(roomId).emit("winner", {
+        winner: winnerName,
+        line: result.line,
+      });
+
+      setTimeout(() => {
+        room.board = Array(9).fill(null);
+        room.turn = "X";
+        io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+      }, 3000);
+    } else if (room.board.every((c) => c !== null)) {
+      io.to(roomId).emit("winner", { winner: "Draw" });
+      setTimeout(() => {
+        room.board = Array(9).fill(null);
+        room.turn = "X";
+        io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+      }, 3000);
+    } else {
+      io.to(roomId).emit("boardUpdate", { board: room.board, turn: room.turn });
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
