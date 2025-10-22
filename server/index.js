@@ -99,6 +99,17 @@ function getBestMove(board) {
   return bestMove;
 }
 
+app.post("/api/ai-move", async (req, res) => {
+  const { board, difficulty = "hard" } = req.body || {};
+  if (!Array.isArray(board) || board.length !== 9)
+    return res.status(400).json({ message: "Invalid board" });
+
+  const emptyIdx = board
+    .map((v, i) => (v === null ? i : null))
+    .filter((x) => x !== null);
+  if (emptyIdx.length === 0) return res.json({ move: null });
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
   console.log(`✅ Server running at http://localhost:${PORT}`)
