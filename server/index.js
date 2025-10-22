@@ -70,7 +70,6 @@ io.on("connection", (socket) => {
 
     const result = checkWinner(room.board);
     if (result) {
-      // Dapatkan nama player berdasarkan symbol
       const winnerSymbol = result.winner;
       const winnerPlayer = room.players[winnerSymbol === "X" ? 0 : 1];
       const winnerName = winnerPlayer?.name || winnerSymbol;
@@ -95,6 +94,14 @@ io.on("connection", (socket) => {
     } else {
       io.to(roomId).emit("boardUpdate", { board: room.board, turn: room.turn });
     }
+  });
+
+  socket.on("chatMessage", ({ roomId, playerName, message }) => {
+    if (!roomId || !message?.trim()) return;
+    io.to(roomId).emit("chatMessage", {
+      playerName: playerName?.trim() || "Player",
+      message: message.trim(),
+    });
   });
 });
 
