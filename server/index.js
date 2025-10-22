@@ -1,9 +1,9 @@
-require("dotenv").config();
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const { Server } = require("socket.io");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+require("dotenv").config();
 
 const app = express();
 const server = http.createServer(app);
@@ -15,7 +15,7 @@ app.use(express.json());
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 if (!GEMINI_API_KEY) {
   console.warn(
-    "⚠️ GEMINI_API_KEY tidak ditemukan. AI akan menggunakan random move."
+    " GEMINI_API_KEY tidak ditemukan. AI akan menggunakan random move."
   );
 }
 const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
@@ -23,9 +23,10 @@ const model = genAI
   ? genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
   : null;
 
+
 const rooms = {};
 
-app.get("/", (_req, res) => res.send("Tic-Tac-Toe Realtime Server OK"));
+app.get("/", (_req, res) => res.send(" Tic-Tac-Toe Realtime Server OK"));
 
 function checkWinnerAI(board) {
   const lines = [
@@ -50,9 +51,9 @@ function minimax(board, depth, isMaximizing) {
   const winner = checkWinnerAI(board);
 
   // Terminal states
-  if (winner === "O") return 10 - depth; // AI wins
-  if (winner === "X") return depth - 10; // Player wins
-  if (board.every((cell) => cell !== null)) return 0; // Draw
+  if (winner === "O") return 10 - depth; 
+  if (winner === "X") return depth - 10; 
+  if (board.every((cell) => cell !== null)) return 0; 
 
   if (isMaximizing) {
     let bestScore = -Infinity;
@@ -108,12 +109,13 @@ app.post("/api/ai-move", async (req, res) => {
     .map((v, i) => (v === null ? i : null))
     .filter((x) => x !== null);
   if (emptyIdx.length === 0) return res.json({ move: null });
+
   try {
     let move;
 
     if (difficulty === "hard") {
       move = getBestMove([...board]);
-      console.log(`🤖 AI (HARD): Calculated best move = ${move}`);
+      console.log(` AI (HARD): Calculated best move = ${move}`);
     } else if (difficulty === "medium" && model) {
       const boardState = board
         .map((cell, i) => {
@@ -121,7 +123,7 @@ app.post("/api/ai-move", async (req, res) => {
           return `${i}: ${cell}`;
         })
         .join(", ");
-        
+
       const prompt = `You are playing Tic-Tac-Toe as O player. The current board state is: ${boardState}.
 Available moves (empty cells): ${emptyIdx.join(", ")}.
 
@@ -141,15 +143,14 @@ Respond with ONLY the cell number (0-8) you want to place O. No explanation, jus
 
       if (aiMove >= 0 && aiMove <= 8 && emptyIdx.includes(aiMove)) {
         move = aiMove;
-        console.log(`🤖 AI (MEDIUM): Gemini chose ${move}`);
+        console.log(` AI (MEDIUM): Gemini chose ${move}`);
       } else {
         move = emptyIdx[Math.floor(Math.random() * emptyIdx.length)];
-        console.log(`🤖 AI (MEDIUM): Fallback random = ${move}`);
+        console.log(` AI (MEDIUM): Fallback random = ${move}`);
       }
     } else {
-      // EASY MODE: Random
       move = emptyIdx[Math.floor(Math.random() * emptyIdx.length)];
-      console.log(`🤖 AI (EASY): Random move = ${move}`);
+      console.log(` AI (EASY): Random move = ${move}`);
     }
 
     res.json({ move, difficulty });
@@ -160,7 +161,127 @@ Respond with ONLY the cell number (0-8) you want to place O. No explanation, jus
   }
 });
 
+io.on("connection", (socket) => {
+  socket.on("joinRoom", ({ roomId, playerName }) => {
+    if (!roomId) return;
+    socket.join(roomId);
+
+    if (!rooms[roomId]) {
+      rooms[roomId] = {
+        board: Array(9).fill(null),
+        turn: "X",
+        players: [],
+      };
+    }
+
+    const room = rooms[roomId];
+
+    const existingPlayerIdx = room.players.findIndex(
+      (p) => p.socketId === socket.id
+    );
+    if (existingPlayerIdx === -1) {
+      const safeName =
+        playerName?.trim() || `Player-${String(socket.id).slice(-4)}`;
+
+      const nameTaken = room.players.some(
+        (p) => p.name.toLowerCase() === safeName.toLowerCase()
+      );
+      if (nameTaken) {
+        socket.emit("error", {
+          message: "Nama sudah digunakan di room ini. Silakan ganti nama!",
+        });
+        return;
+      }
+
+      room.players.push({ name: safeName, socketId: socket.id });
+    }
+
+    io.to(roomId).emit("playerJoined", {
+      players: room.players.map((p) => ({
+        name: p.name,
+        socketId: p.socketId,
+      })),
+      turn: room.turn,
+      board: room.board,
+    });
+  });
+
+  socket.on("makeMove", ({ roomId, index, symbol }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (index < 0 || index > 8) return;
+    if (room.board[index]) return;
+    if (symbol !== room.turn) return;
+
+    room.board[index] = symbol;
+    room.turn = symbol === "X" ? "O" : "X";
+
+    const result = checkWinner(room.board);
+    if (result) {
+      const winnerSymbol = result.winner;
+      const winnerPlayer = room.players[winnerSymbol === "X" ? 0 : 1];
+      const winnerName = winnerPlayer?.name || winnerSymbol;
+
+      io.to(roomId).emit("winner", {
+        winner: winnerName,
+        line: result.line,
+      });
+
+      setTimeout(() => {
+        room.board = Array(9).fill(null);
+        room.turn = "X";
+        io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+      }, 3000);
+    } else if (room.board.every((c) => c !== null)) {
+      io.to(roomId).emit("winner", { winner: "Draw" });
+      setTimeout(() => {
+        room.board = Array(9).fill(null);
+        room.turn = "X";
+        io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+      }, 3000);
+    } else {
+      io.to(roomId).emit("boardUpdate", { board: room.board, turn: room.turn });
+    }
+  });
+
+  socket.on("chatMessage", ({ roomId, playerName, message }) => {
+    if (!roomId || !message?.trim()) return;
+    io.to(roomId).emit("chatMessage", {
+      playerName: playerName?.trim() || "Player",
+      message: message.trim(),
+    });
+  });
+
+  socket.on("resetGameRequest", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    room.board = Array(9).fill(null);
+    room.turn = "X";
+    io.to(roomId).emit("resetGame", { board: room.board, turn: room.turn });
+  });
+});
+
+function checkWinner(board) {
+  const lines = [
+    [0, 1, 2],
+    [3, 4, 5],
+    [6, 7, 8],
+    [0, 3, 6],
+    [1, 4, 7],
+    [2, 5, 8],
+    [0, 4, 8],
+    [2, 4, 6],
+  ];
+
+  for (const [a, b, c] of lines) {
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return { winner: board[a], line: [a, b, c] }; 
+    }
+  }
+  return null;
+}
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () =>
-  console.log(`✅ Server running at http://localhost:${PORT}`)
+  console.log(` Server running at http://localhost:${PORT}`)
 );
