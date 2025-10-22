@@ -108,6 +108,20 @@ app.post("/api/ai-move", async (req, res) => {
     .map((v, i) => (v === null ? i : null))
     .filter((x) => x !== null);
   if (emptyIdx.length === 0) return res.json({ move: null });
+  try {
+    let move;
+
+    if (difficulty === "hard") {
+      move = getBestMove([...board]);
+      console.log(`🤖 AI (HARD): Calculated best move = ${move}`);
+    } 
+
+    res.json({ move, difficulty });
+  } catch (error) {
+    console.error("AI error:", error.message);
+    const move = emptyIdx[Math.floor(Math.random() * emptyIdx.length)];
+    res.json({ move });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
